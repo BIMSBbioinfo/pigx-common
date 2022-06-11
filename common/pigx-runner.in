@@ -2,7 +2,7 @@
 # -*- python -*-
 # PiGx -- Pipelines in Genomics.
 #
-# Copyright © 2017-2021 Akalin lab.
+# Copyright © 2017-2022 Akalin lab.
 #
 # This file is part of PiGx.
 #
@@ -40,7 +40,7 @@ There is NO WARRANTY, to the extent permitted by law.
 
 @PIPELINE_META@
 
-epilog = "This pipeline was developed by the Akalin group at MDC in Berlin in 2017-2021."
+epilog = "This pipeline was developed by the Akalin group at MDC in Berlin in 2017-2022."
 
 
 import argparse
@@ -214,14 +214,17 @@ settings.
         defaults = path.join(dirs['locations']['pkgdatadir'], 'settings.yaml')
 
     if not path.exists(defaults):
-        bail("Could not find default settings.  Did you forget to set PIGX_UNINSTALLED?")
+        bail(
+            f"Could not find default settings at {defaults}. Did you forget "
+            f"to set PIGX_UNINSTALLED?"
+        )
 
     settings = yaml.safe_load(open(defaults, 'r'))
 
     # Load user overrides
     if settingsfile:
         if not os.path.isfile(settingsfile):
-            bail('ERROR: settings.yaml file not found')
+            bail(f'ERROR: {settingsfile} file not found')
         update_config(settings,yaml.safe_load(open(settingsfile, 'r')))
 
     settings['execution']['target'] = args.target
