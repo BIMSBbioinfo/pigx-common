@@ -4,8 +4,7 @@
 #
 # Copyright © 2021 Alexander Blume <alexander.blume@mdc-berlin.de>
 #
-# This file is provided to help the developers of the PiGx Pipelines.
-#
+# This file is provided to help the developers of the PiGx Pipelines.  #
 # Change History
 # 08/06/2021 Alexander Blume    Update help message.
 #                               Add release and sign.
@@ -49,7 +48,7 @@ build() {
 	## initialisation to run pipeline both from git folder and
 	## from any folder with absolute path as [git-folder]/local_install/pigx-bsseq ...
   	./bootstrap.sh
-	./configure --prefix=$PWD/local_install --disable-r-packages-check
+	./configure --prefix=$PWD/local_install
 	make install
 }
 
