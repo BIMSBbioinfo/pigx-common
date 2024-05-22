@@ -390,7 +390,6 @@ command = [
     "@SNAKEMAKE@",
     "--snakefile={}/snakefile.py".format(config['locations']['pkglibexecdir']),
     "--configfile={}".format(args.configfile),
-    "--directory={}".format(config['locations']['output-dir']),
     "--jobs={}".format(config['execution']['jobs']),
     "--rerun-incomplete"
 ]
