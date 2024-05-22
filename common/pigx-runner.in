@@ -2,7 +2,7 @@
 # -*- python -*-
 # PiGx -- Pipelines in Genomics.
 #
-# Copyright © 2017-2022 Akalin lab.
+# Copyright © 2017-2024 Akalin lab.
 #
 # This file is part of PiGx.
 #
@@ -78,6 +78,11 @@ The config file used for calling the underlying snakemake process.  By
 default the file 'config.json' is dynamically created from the sample
 sheet and the settings file.
 """)
+
+parser.add_argument('--reuse-configfile', dest='reuse_configfile', action='store_true',
+                    help="""\
+When provided, do not generate a new config file from the settings
+file but reuse an existing config file, if it exists.""")
 
 parser.add_argument('--target', dest='target', action='append',
                     help="""\
@@ -374,14 +379,13 @@ if args.init:
             print('Generated {} template.'.format(name))
     exit(0)
 
-# Run snakemake!
-generate_config(args.configfile,
-                args.sample_sheet,
-                args.settings,
-                dirs)
+
+if not (args.reuse_configfile and path.exists(args.configfile)):
+    generate_config(args.configfile, args.sample_sheet, args.settings, dirs)
 
 config = json.load(open(args.configfile, 'r'))
 
+# Run snakemake!
 command = [
     "@SNAKEMAKE@",
     "--snakefile={}/snakefile.py".format(config['locations']['pkglibexecdir']),
