@@ -85,10 +85,9 @@ parser.add_argument('--reuse-configfile', dest='reuse_configfile', action='store
 When provided, do not generate a new config file from the settings
 file but reuse an existing config file, if it exists.""")
 
-parser.add_argument('--normalize-locations', dest='normalize_locations', default=True, action='store_true',
+parser.add_argument('--do-not-normalize-locations', dest='do_not_normalize_locations', action='store_false',
                     help="""\
-When provided, convert all relative file
-names to absolute file names when writing the configuration file.""")
+When provided, do not convert relative file names to absolute file names when writing the configuration file.""")
 
 parser.add_argument('--target', dest='target', action='append',
                     help="""\
@@ -150,7 +149,7 @@ def bail(msg):
     exit(1)
 
 
-def generate_config(configfile, sample_sheet, settingsfile, dirs, normalize_locations):
+def generate_config(configfile, sample_sheet, settingsfile, dirs, do_not_normalize_locations):
     """Generate a new configuration file CONFIGFILE using SAMPLE_SHEET and
 SETTINGSFILE as inputs.  Use the locations in DIRS to find default
 settings.
@@ -189,7 +188,7 @@ settings.
     root = path.dirname(sample_sheet)
     here = os.getenv('srcdir') if os.getenv('srcdir') else os.getcwd()
 
-    if normalize_locations:
+    if not do_not_normalize_locations:
         for key in settings['locations']:
             if settings['locations'][key]:
                 settings['locations'][key] = path.normpath(
@@ -388,7 +387,7 @@ if args.init:
 
 
 if not (args.reuse_configfile and path.exists(args.configfile)):
-    generate_config(args.configfile, args.sample_sheet, args.settings, dirs, args.normalize_locations)
+    generate_config(args.configfile, args.sample_sheet, args.settings, dirs, args.do_not_normalize_locations)
 
 config = json.load(open(args.configfile, 'r'))
 
