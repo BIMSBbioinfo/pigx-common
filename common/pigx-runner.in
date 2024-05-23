@@ -84,6 +84,11 @@ parser.add_argument('--reuse-configfile', dest='reuse_configfile', action='store
 When provided, do not generate a new config file from the settings
 file but reuse an existing config file, if it exists.""")
 
+parser.add_argument('--normalize-locations', dest='normalize_locations', default=True, action='store_true',
+                    help="""\
+When provided, convert all relative file
+names to absolute file names when writing the configuration file.""")
+
 parser.add_argument('--target', dest='target', action='append',
                     help="""\
 Stop when the named target is completed instead of running the whole
@@ -144,7 +149,7 @@ def bail(msg):
     exit(1)
 
 
-def generate_config(configfile, sample_sheet, settingsfile, dirs):
+def generate_config(configfile, sample_sheet, settingsfile, dirs, normalize_locations):
     """Generate a new configuration file CONFIGFILE using SAMPLE_SHEET and
 SETTINGSFILE as inputs.  Use the locations in DIRS to find default
 settings.
@@ -183,13 +188,14 @@ settings.
     root = path.dirname(sample_sheet)
     here = os.getenv('srcdir') if os.getenv('srcdir') else os.getcwd()
 
-    for key in settings['locations']:
-        if settings['locations'][key]:
-            settings['locations'][key] = path.normpath(
-                path.join(
-                    here,
-                    root,
-                    path.expanduser(settings['locations'][key])))
+    if normalize_locations:
+        for key in settings['locations']:
+            if settings['locations'][key]:
+                settings['locations'][key] = path.normpath(
+                    path.join(
+                        here,
+                        root,
+                        path.expanduser(settings['locations'][key])))
 
     # FIXME: special case for scrnaseq: resolve genome fasta / gtf files
     if "@PACKAGE_NAME@".lower() == 'pigx_scrnaseq':
@@ -381,7 +387,7 @@ if args.init:
 
 
 if not (args.reuse_configfile and path.exists(args.configfile)):
-    generate_config(args.configfile, args.sample_sheet, args.settings, dirs)
+    generate_config(args.configfile, args.sample_sheet, args.settings, dirs, args.normalize_locations)
 
 config = json.load(open(args.configfile, 'r'))
 
