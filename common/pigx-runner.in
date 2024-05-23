@@ -85,7 +85,7 @@ parser.add_argument('--reuse-configfile', dest='reuse_configfile', action='store
 When provided, do not generate a new config file from the settings
 file but reuse an existing config file, if it exists.""")
 
-parser.add_argument('--do-not-normalize-locations', dest='do_not_normalize_locations', action='store_false',
+parser.add_argument('--do-not-normalize-locations', dest='do_not_normalize_locations', default=False, action='store_true',
                     help="""\
 When provided, do not convert relative file names to absolute file names when writing the configuration file.""")
 
