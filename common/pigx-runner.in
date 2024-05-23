@@ -23,6 +23,7 @@ if 'yes' == '@capture_environment@':
     import os, sys
     os.environ["R_LIBS_SITE"] = "@R_LIBS_SITE@"
     os.environ["PYTHONPATH"] = "@PYTHONPATH@"
+    os.environ["GUIX_PYTHONPATH"] = os.environ["PYTHONPATH"]
     # Setting PYTHONPATH does not help with dependencies needed for
     # this script.
     for directory in "@PYTHONPATH@".split(":"):
