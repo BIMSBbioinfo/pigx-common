@@ -275,6 +275,7 @@ def validate_cluster_args(cluster_system, args_string):
             ('--output', 'use -o instead'),
             ('--error', 'use -e instead'),
             ('--export', 'use -v instead')
+            ('-C', 'use -l instead')
         ]
 
         for pattern, description in slurm_patterns:
@@ -296,7 +297,8 @@ def convert_sge_args_to_slurm(args_string):
         '-P ': '--account=',
         '-N ': '--job-name=',
         '-o ': '--output=',
-        '-e ': '--error='
+        '-e ': '--error=',
+        '-l data': '--constraint=data'
     }
 
     converted = args_string
