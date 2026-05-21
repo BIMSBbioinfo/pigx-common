@@ -517,24 +517,11 @@ if config['execution']['submit-to-cluster']:
     if config['execution']['cluster']['contact-email'].lower() == 'none':
         contact_email_string = ""
     else:
-        contact_email_string = "-m a -M %s" % config['execution']['cluster']['contact-email']
+        if cluster_system == 'sge':
+            contact_email_string = "-m a -M %s" % config['execution']['cluster']['contact-email']
+        else:  # SLURM
+            contact_email_string = "--mail-type=END,FAIL --mail-user=%s" % config['execution']['cluster']['contact-email']
 
-
-    # check if machine allows for queue submission at all
-    try:
-        subprocess.call(["qsub", "-help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except OSError as e:
-        if e.errno == errno.ENOENT:
-            print("Error: Your system does not seem to support cluster submission.\nReason: Could not find qsub executable.", file=sys.stderr)
-            exit(1)
-        else:
-            raise
-
-    qsub = "qsub -v R_LIBS_USER -v R_LIBS -v PIGX_PATH -v RSTUDIO_PANDOC -v GUIX_LOCPATH %s -l h_stack={cluster.h_stack}  -l h_vmem={cluster.MEM} %s -b y -pe smp {cluster.nthreads} -cwd" % (queue_selection_string, contact_email_string)
-    if config['execution']['cluster']['log-dir']:
-        qsub += " -o %s/ " % config['execution']['cluster']['log-dir']
-        qsub += " -e %s/ " % config['execution']['cluster']['log-dir']
-        os.makedirs(config['execution']['cluster']['log-dir'], exist_ok=True)
 
     if config['execution']['cluster']['args']:
         qsub += " " + config['execution']['cluster']['args']
