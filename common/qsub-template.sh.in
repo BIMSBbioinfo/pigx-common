@@ -4,7 +4,7 @@
 if [ 'yes' = '@capture_environment@' ]; then
     export R_LIBS_SITE="@R_LIBS_SITE@"
     export PYTHONPATH="@PYTHONPATH@"
-    export RSTUDIO_PANDOC=$(dirname "@PANDOC@")
+    export RSTUDIO_PANDOC="$(dirname @PANDOC@)"
 fi
 
 env
