@@ -508,15 +508,10 @@ if config['execution']['submit-to-cluster']:
 
     # Check if a particular queue has been specified: 
     if ( ('queue' in config['execution']['cluster'] )  or ( 'queue' in config['execution']['rules']['__default__'] )):
-        queue_selection_string = " -q {cluster.queue} "
-	# User has defined queue name(s) --either generally, or rule-specific.
-	# in either case, generate_cluster_configuration() (defined above) has 
-        # already printed the apropriate queue name to each rule.
-        queue_selection_string = " -q {cluster.queue} "
+        queue_selection_string = " -q {cluster.queue} " if cluster_system == 'sge' else " --partition={cluster.queue} "
     else :
-        # User has supplied no q value -> let SGE pick the the default.
+        # User has supplied no queue value -> let scheduler pick the default.
         queue_selection_string = ""
-    # --- done checking if ( queue name(s) supplied by user)
 
     # check if a contact email has been specified:
     if config['execution']['cluster']['contact-email'].lower() == 'none':
