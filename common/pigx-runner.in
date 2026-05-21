@@ -232,6 +232,83 @@ def detect_cluster_system():
             raise
 
     return None
+
+def validate_cluster_args(cluster_system, args_string):
+    """Validate cluster arguments for compatibility with the detected cluster system."""
+    if not args_string:
+        return args_string, []
+
+    warnings = []
+
+    if cluster_system == 'slurm':
+        # Check for SGE-specific arguments that won't work with SLURM
+        sge_patterns = [
+            ('-l ', 'resource requests (use SLURM equivalents like --time, --mem, etc.)'),
+            ('-pe ', 'parallel environment (use --cpus-per-task or --ntasks instead)'),
+            ('-q ', 'queue specification (use --partition instead)'),
+            ('-P ', 'project specification (use --account instead)'),
+            ('-m ', 'mail options (use --mail-type instead)'),
+            ('-M ', 'mail address (use --mail-user instead)'),
+            ('-N ', 'job name (use --job-name instead)'),
+            ('-o ', 'output file (use --output instead)'),
+            ('-e ', 'error file (use --error instead)'),
+            ('-cwd', 'current working directory (SLURM runs in submission directory by default)'),
+            ('-b y', 'binary execution (not needed in SLURM)'),
+            ('-v ', 'environment variables (use --export instead)')
+        ]
+
+        for pattern, description in sge_patterns:
+            if pattern in args_string:
+                warnings.append(f"SGE option '{pattern.strip()}' detected - {description}")
+
+    elif cluster_system == 'sge':
+        # Check for SLURM-specific arguments that won't work with SGE
+        slurm_patterns = [
+            ('--time', 'use -l h_rt instead'),
+            ('--mem', 'use -l h_vmem instead'),
+            ('--cpus-per-task', 'use -pe smp instead'),
+            ('--partition', 'use -q instead'),
+            ('--account', 'use -P instead'),
+            ('--mail-type', 'use -m instead'),
+            ('--mail-user', 'use -M instead'),
+            ('--job-name', 'use -N instead'),
+            ('--output', 'use -o instead'),
+            ('--error', 'use -e instead'),
+            ('--export', 'use -v instead')
+        ]
+
+        for pattern, description in slurm_patterns:
+            if pattern in args_string:
+                warnings.append(f"SLURM option '{pattern}' detected - {description}")
+
+    return args_string, warnings
+
+def convert_sge_args_to_slurm(args_string):
+    """Convert common SGE arguments to SLURM equivalents."""
+    if not args_string:
+        return args_string
+
+    # Common conversions
+    conversions = {
+        '-l h_rt=': '--time=',
+        '-l h_vmem=': '--mem=',
+        '-q ': '--partition=',
+        '-P ': '--account=',
+        '-N ': '--job-name=',
+        '-o ': '--output=',
+        '-e ': '--error='
+    }
+
+    converted = args_string
+    applied_conversions = []
+
+    for sge_opt, slurm_opt in conversions.items():
+        if sge_opt in converted:
+            converted = converted.replace(sge_opt, slurm_opt)
+            applied_conversions.append(f"'{sge_opt}' → '{slurm_opt}'")
+
+    return converted, applied_conversions
+
 def generate_cluster_configuration():
     rules = config['execution']['rules']
 
