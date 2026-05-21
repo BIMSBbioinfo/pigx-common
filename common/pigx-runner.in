@@ -213,6 +213,25 @@ settings.
                            separators=(",",": "), ensure_ascii=True)
         outfile.write(dumps)
 
+def detect_cluster_system():
+    """Detect which cluster system is available (SGE or SLURM)."""
+    # Check for SLURM first (sbatch)
+    try:
+        subprocess.call(["sbatch", "--help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return 'slurm'
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+
+    # Check for SGE (qsub)
+    try:
+        subprocess.call(["qsub", "-help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return 'sge'
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+
+    return None
 def generate_cluster_configuration():
     rules = config['execution']['rules']
 
@@ -401,8 +420,14 @@ command = [
 ]
 
 if config['execution']['submit-to-cluster']:
+    cluster_system = detect_cluster_system()
+
+    if cluster_system is None:
+        print("Error: Your system does not seem to support cluster submission.\nReason: Could not find qsub (SGE) or sbatch (SLURM) executable.", file=sys.stderr)
+        exit(1)
+
     cluster_config_file = generate_cluster_configuration()
-    print("Commencing snakemake run submission to cluster", flush=True, file=sys.stderr)
+    print(f"Commencing snakemake run submission to {cluster_system.upper()} cluster", flush=True, file=sys.stderr)
 
     # Check if a particular queue has been specified: 
     if ( ('queue' in config['execution']['cluster'] )  or ( 'queue' in config['execution']['rules']['__default__'] )):
