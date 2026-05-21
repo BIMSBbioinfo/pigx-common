@@ -274,7 +274,7 @@ def validate_cluster_args(cluster_system, args_string):
             ('--job-name', 'use -N instead'),
             ('--output', 'use -o instead'),
             ('--error', 'use -e instead'),
-            ('--export', 'use -v instead')
+            ('--export', 'use -v instead'),
             ('-C', 'use -l instead')
         ]
 
