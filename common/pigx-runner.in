@@ -524,6 +524,35 @@ if config['execution']['submit-to-cluster']:
 
     # put submission command
     submission_command_string=submission_command
+
+
+    # put environment variables
+    if cluster_system == 'sge': 
+        submission_command_string += " -v R_LIBS_USER -v R_LIBS -v PIGX_PATH -v GUIX_LOCPATH -v RSTUDIO_PANDOC"
+    else:  # SLURM
+        submission_command_string += " --export=R_LIBS_USER,R_LIBS,PIGX_PATH,GUIX_LOCPATH,RSTUDIO_PANDOC"
+
+    # put resources
+    if cluster_system == 'sge':
+        submission_command_string += " %s -l h_vmem={cluster.MEM} %s -pe smp {cluster.nthreads}" % (queue_selection_string, contact_email_string)
+        # put sge specific options
+        submission_command_string += " -b y -cwd"
+        # Add stack parameter only if it exists in the cluster config
+        if 'stack' in config['execution']['cluster']:
+            submission_command_string += " -l h_stack={cluster.h_stack}"
+    else:  # SLURM
+        submission_command_string += " %s --mem={cluster.MEM} %s --cpus-per-task={cluster.nthreads}" % (queue_selection_string, contact_email_string)
+
+    # set logging directory
+    if config['execution']['cluster']['log-dir']:
+        if cluster_system == 'sge':
+            submission_command_string += " -o %s/ " % config['execution']['cluster']['log-dir']
+            submission_command_string += " -e %s/ " % config['execution']['cluster']['log-dir']
+        else:  # SLURM
+            submission_command_string += " --output=%s/ " % config['execution']['cluster']['log-dir']
+            submission_command_string += " --error=%s/ " % config['execution']['cluster']['log-dir']
+        os.makedirs(config['execution']['cluster']['log-dir'], exist_ok=True)
+
 else:
     print("Commencing snakemake run submission locally", flush=True, file=sys.stderr)
 
