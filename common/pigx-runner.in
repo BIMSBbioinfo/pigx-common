@@ -553,6 +553,38 @@ if config['execution']['submit-to-cluster']:
             submission_command_string += " --error=%s/ " % config['execution']['cluster']['log-dir']
         os.makedirs(config['execution']['cluster']['log-dir'], exist_ok=True)
 
+
+    # check for incompatible arguments
+    if config['execution']['cluster']['args']:
+        # Validate and potentially convert cluster arguments
+        original_args = config['execution']['cluster']['args']
+        validated_args, warnings = validate_cluster_args(cluster_system, original_args)
+
+        if warnings:
+            print(f"Warning: Incompatible cluster arguments detected for {cluster_system.upper()}:", file=sys.stderr)
+            for warning in warnings:
+                print(f"  - {warning}", file=sys.stderr)
+
+            if cluster_system == 'slurm':
+                # Try to auto-convert SGE args to SLURM
+                converted_args, conversions = convert_sge_args_to_slurm(original_args)
+                if conversions:
+                    print("Attempting automatic conversion:", file=sys.stderr)
+                    for conversion in conversions:
+                        print(f"  - {conversion}", file=sys.stderr)
+                    submission_command_string += " " + converted_args
+                    print(f"Using converted args: {converted_args}", file=sys.stderr)
+            else:
+                print("No automatic conversion available. Please update your settings file.", file=sys.stderr)
+                submission_command_string += " " + original_args
+        
+    command += [
+        "--cluster-config={}".format(cluster_config_file),
+        "--cluster={}".format(submission_command_string),
+        "--jobscript={}/qsub-template.sh".format(config['locations']['pkglibexecdir']),
+        "--latency-wait={}".format(config['execution']['cluster']['missing-file-timeout'])
+    ]
+
 else:
     print("Commencing snakemake run submission locally", flush=True, file=sys.stderr)
 
