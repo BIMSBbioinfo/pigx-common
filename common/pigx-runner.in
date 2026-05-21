@@ -324,34 +324,32 @@ def generate_cluster_configuration():
         elif mem_mb.isdigit():
             mem_mb = mem_mb + 'M'
 
+        # Basic configuration for all cluster systems
+        rule_conf = {
+            'nthreads': rules[rule]['threads'],
+            'MEM': mem_mb
+        }
+
+        # Add SGE-specific stack parameter only if it exists
+        if 'stack' in config['execution']['cluster']:
+            rule_conf['h_stack'] = config['execution']['cluster']['stack']
+
         if 'queue' in config['execution']['cluster']:
             # --- User has supplied general queue name for all rules---
             if 'queue' in rules[rule]:
               bail("ERROR: 'queue' multiply defined in settings file.") #AND per rule ->error
             else:
-              cluster_conf[rule] = {
-              'nthreads': rules[rule]['threads'],
-              'MEM':      mem_mb,
-              'queue':    config['execution']['cluster']['queue'],
-              'h_stack':  config['execution']['cluster']['stack']
-              }
+              rule_conf['queue'] = config['execution']['cluster']['queue']
+              cluster_conf[rule] = rule_conf
         elif ( 'queue' in rules[rule] ):
             # --- User has supplied a queue for this specific rule.
             if not 'queue' in rules['__default__']:
                 bail("ERROR: submission queue specified per rule with no default.")
-            cluster_conf[rule] = {
-              'nthreads': rules[rule]['threads'],
-              'MEM':      mem_mb,
-              'queue':    rules[rule]['queue'],
-              'h_stack':  config['execution']['cluster']['stack']
-              }
+            rule_conf['queue'] = rules[rule]['queue']
+            cluster_conf[rule] = rule_conf
         else:
               # --- User has provided no information on queue for this rule -> default.
-              cluster_conf[rule] = {
-              'nthreads': rules[rule]['threads'],
-              'MEM':      mem_mb,
-              'h_stack':  config['execution']['cluster']['stack']
-              }
+              cluster_conf[rule] = rule_conf
 
     cluster_config_file = "cluster_conf.json"
     with open(cluster_config_file, 'w') as outfile:
