@@ -325,10 +325,8 @@ def generate_cluster_configuration():
             mem_mb = mem_mb + 'M'
 
         # Basic configuration for all cluster systems
-        rule_conf = {
-            'nthreads': rules[rule]['threads'],
-            'MEM': mem_mb
-        }
+        rule_conf = {'nthreads': rules[rule]['threads'], 'MEM': mem_mb}
+        rule_conf.update({key: value for key, value in rules[rule].items() if key not in rules['__default__']})
 
         # Add SGE-specific stack parameter only if it exists
         if 'stack' in config['execution']['cluster']:
