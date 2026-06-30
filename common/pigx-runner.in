@@ -525,7 +525,7 @@ if config['execution']['submit-to-cluster']:
 
 
     # put environment variables
-    cluster_env_vars = ["R_LIBS_USER", "R_LIBS", "PIGX_PATH", "GUIX_LOCPATH", "RSTUDIO_PANDOC"]
+    cluster_env_vars = ["R_LIBS_USER", "R_LIBS", "PIGX_PATH", "PIGX_UNINSTALLED", "GUIX_LOCPATH", "RSTUDIO_PANDOC"]
     if cluster_system == 'sge': 
         submission_command_string += " -v " + " -v ".join(cluster_env_vars)
     else:  # SLURM
