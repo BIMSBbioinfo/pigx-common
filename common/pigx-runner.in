@@ -549,8 +549,8 @@ if config['execution']['submit-to-cluster']:
             submission_command_string += " -o %s/ " % config['execution']['cluster']['log-dir']
             submission_command_string += " -e %s/ " % config['execution']['cluster']['log-dir']
         else:  # SLURM
-            submission_command_string += " --output=%s/ " % config['execution']['cluster']['log-dir']
-            submission_command_string += " --error=%s/ " % config['execution']['cluster']['log-dir']
+            submission_command_string += " --output=%s/%%x.%%j.out " % config['execution']['cluster']['log-dir']
+            submission_command_string += " --error=%s/%%x.%%j.err " % config['execution']['cluster']['log-dir']
         os.makedirs(config['execution']['cluster']['log-dir'], exist_ok=True)
 
 
