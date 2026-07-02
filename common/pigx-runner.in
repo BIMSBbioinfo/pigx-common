@@ -218,7 +218,7 @@ def detect_cluster_system():
     # Check for SLURM first (sbatch)
     try:
         subprocess.call(["sbatch", "--help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return 'slurm', 'sbatch'
+        return 'slurm', 'sbatch --parsable'
     except OSError as e:
         if e.errno != errno.ENOENT:
             raise
