@@ -326,7 +326,16 @@ def generate_cluster_configuration():
 
         # Basic configuration for all cluster systems
         rule_conf = {'nthreads': rules[rule]['threads'], 'MEM': mem_mb}
-        rule_conf.update({key: value for key, value in rules[rule].items() if key not in rules['__default__']})
+
+        # extend configuration for slurm using args or custom keys
+        # both are saved into args; only one option is allowed for simplicit:
+        # - either as full string in args or 
+        # - as items not found in default rule
+        custom_keys = [k for k in rules[rule] if k not in rules['__default__'] and k != 'args']
+        parts = [f"--{k}={rules[rule][k]}" for k in custom_keys]
+        if rules[rule].get('args'):
+            parts.append(rules[rule]['args'])
+        rule_conf['args'] = " ".join(parts)
 
         # Add SGE-specific stack parameter only if it exists
         if 'stack' in config['execution']['cluster']:
@@ -576,6 +585,9 @@ if config['execution']['submit-to-cluster']:
             else:
                 print("No automatic conversion available. Please update your settings file.", file=sys.stderr)
                 submission_command_string += " " + original_args
+
+    # allow for custom args per rule; will only filled if rule
+    submission_command_string += " {cluster.args}"
 
     if config['execution']['cluster']['debug']:
 
