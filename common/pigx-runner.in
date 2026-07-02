@@ -576,7 +576,16 @@ if config['execution']['submit-to-cluster']:
             else:
                 print("No automatic conversion available. Please update your settings file.", file=sys.stderr)
                 submission_command_string += " " + original_args
-        
+
+    if config['execution']['cluster']['debug']:
+
+        debug_path = ( config['execution']['cluster']['debug'] if os.path.isabs(config['execution']['cluster']['debug']) else os.path.join(os.getcwd(), config['execution']['cluster']['debug']) ) 
+        os.makedirs(debug_path, exist_ok=True)
+
+        # dump the submission command into a file for debugging
+        with open(os.path.join(debug_path, "cluster_submission_command.sh"), "w") as f:
+            f.write(submission_command_string + "\n")
+
     command += [
         "--slurm" if cluster_system == 'slurm' else "",
         "--cluster-config={}".format(cluster_config_file),
