@@ -578,6 +578,7 @@ if config['execution']['submit-to-cluster']:
                 submission_command_string += " " + original_args
         
     command += [
+        "--slurm" if cluster_system == 'slurm' else "",
         "--cluster-config={}".format(cluster_config_file),
         "--cluster={}".format(submission_command_string),
         "--jobscript={}/qsub-template.sh".format(config['locations']['pkglibexecdir']),
