@@ -589,7 +589,7 @@ if config['execution']['submit-to-cluster']:
     # allow for custom args per rule; will only filled if rule
     submission_command_string += " {cluster.args}"
 
-    if config['execution']['cluster']['debug']:
+    if config['execution']['cluster'].get('debug'):
 
         debug_path = ( config['execution']['cluster']['debug'] if os.path.isabs(config['execution']['cluster']['debug']) else os.path.join(os.getcwd(), config['execution']['cluster']['debug']) ) 
         os.makedirs(debug_path, exist_ok=True)
