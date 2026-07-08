@@ -600,6 +600,7 @@ if config['execution']['submit-to-cluster']:
 
     command += [
         "--cluster-cancel=scancel" if cluster_system == 'slurm' else "",
+        "--cluster-status={}/slurm-status.py".format(config['locations']['pkglibexecdir']),
         "--cluster-config={}".format(cluster_config_file),
         "--cluster={}".format(submission_command_string),
         "--jobscript={}/qsub-template.sh".format(config['locations']['pkglibexecdir']),
