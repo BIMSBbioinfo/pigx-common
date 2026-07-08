@@ -331,7 +331,7 @@ def generate_cluster_configuration():
         # both are saved into args; only one option is allowed for simplicit:
         # - either as full string in args or 
         # - as items not found in default rule
-        custom_keys = [k for k in rules[rule] if k not in rules['__default__'] and k != 'args']
+        custom_keys = [k for k in rules[rule] if k not in rules['__default__'] and k != 'args' and k != 'num_gpus']
         parts = [f"--{k}={rules[rule][k]}" for k in custom_keys]
         if rules[rule].get('args'):
             parts.append(rules[rule]['args'])
