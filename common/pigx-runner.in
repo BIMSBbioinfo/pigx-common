@@ -284,35 +284,45 @@ def validate_cluster_args(cluster_system, args_string):
 
     return args_string, warnings
 
-def convert_sge_args_to_slurm(args_string):
-    """Convert common SGE arguments to SLURM equivalents."""
-    if not args_string:
-        return args_string
+def normalize_cluster_args(args_value, setting_name):
+    """Return a scheduler argument string from a string or list of strings."""
+    if isinstance(args_value, str):
+        return args_value
+    if isinstance(args_value, list) and all(isinstance(arg, str) for arg in args_value):
+        return " ".join(args_value)
 
-    # Common conversions
-    conversions = {
-        '-l h_rt=': '--time=',
-        '-l h_vmem=': '--mem=',
-        '-q ': '--partition=',
-        '-P ': '--account=',
-        '-N ': '--job-name=',
-        '-o ': '--output=',
-        '-e ': '--error=',
-        '-l data': '--constraint=data'
-    }
+    bail(f"ERROR: {setting_name} must be a string or a list of strings.")
 
-    converted = args_string
-    applied_conversions = []
 
-    for sge_opt, slurm_opt in conversions.items():
-        if sge_opt in converted:
-            converted = converted.replace(sge_opt, slurm_opt)
-            applied_conversions.append(f"'{sge_opt}' → '{slurm_opt}'")
+def normalize_cluster_args_configuration(cluster_system):
+    """Normalize and validate every user-provided scheduler argument setting."""
+    cluster = config['execution']['cluster']
+    cluster['args'] = normalize_cluster_args(cluster.get('args', ''), 'execution.cluster.args')
 
-    return converted, applied_conversions
+    for rule_name, rule in config['execution']['rules'].items():
+        if 'args' not in rule:
+            continue
+
+        setting_name = f'execution.rules.{rule_name}.args'
+        rule['args'] = normalize_cluster_args(rule['args'], setting_name)
+        _, warnings = validate_cluster_args(cluster_system, rule['args'])
+        if warnings:
+            print(f"Warning: Incompatible cluster arguments in {setting_name} for {cluster_system.upper()}:", file=sys.stderr)
+            for warning in warnings:
+                print(f"  - {warning}", file=sys.stderr)
+
+    _, warnings = validate_cluster_args(cluster_system, cluster['args'])
+    if warnings:
+        print(f"Warning: Incompatible cluster arguments in execution.cluster.args for {cluster_system.upper()}:", file=sys.stderr)
+        for warning in warnings:
+            print(f"  - {warning}", file=sys.stderr)
+
 
 def generate_cluster_configuration():
     rules = config['execution']['rules']
+    global_args = config['execution']['cluster'].get('args', '')
+    default_args = rules['__default__'].get('args', '')
+    augmented_default_args = " ".join(arg for arg in (global_args, default_args) if arg)
 
     cluster_conf = {}
     for rule in rules:
@@ -327,14 +337,17 @@ def generate_cluster_configuration():
         # Basic configuration for all cluster systems
         rule_conf = {'nthreads': rules[rule]['threads'], 'MEM': mem_mb}
 
-        # extend configuration for slurm using args or custom keys
-        # both are saved into args; only one option is allowed for simplicit:
-        # - either as full string in args or 
-        # - as items not found in default rule
-        custom_keys = [k for k in rules[rule] if k not in rules['__default__'] and k != 'args' and k != 'num_gpus']
-        parts = [f"--{k}={rules[rule][k]}" for k in custom_keys]
-        if rules[rule].get('args'):
-            parts.append(rules[rule]['args'])
+        allowed_rule_keys = {'threads', 'memory', 'queue', 'num_gpus', 'args'}
+        unsupported_keys = set(rules[rule]) - allowed_rule_keys
+        if unsupported_keys:
+            unsupported = ', '.join(sorted(unsupported_keys))
+            bail(f"ERROR: Unsupported execution.rules.{rule} settings: {unsupported}. Use args instead.")
+
+        rule_args = rules[rule].get('args')
+        if rule_args:
+            parts = [arg for arg in (global_args, rule_args) if arg]
+        else:
+            parts = [augmented_default_args] if augmented_default_args else []
         rule_conf['args'] = " ".join(parts)
 
         # Add SGE-specific stack parameter only if it exists
@@ -510,6 +523,7 @@ if config['execution']['submit-to-cluster']:
         print("Error: Your system does not seem to support cluster submission.\nReason: Could not find qsub (SGE) or sbatch (SLURM) executable.", file=sys.stderr)
         exit(1)
 
+    normalize_cluster_args_configuration(cluster_system)
     cluster_config_file = generate_cluster_configuration()
     print(f"Commencing snakemake run submission to {cluster_system.upper()} cluster", flush=True, file=sys.stderr)
 
@@ -560,32 +574,6 @@ if config['execution']['submit-to-cluster']:
             submission_command_string += " --output=%s/%%x.%%j.out " % config['execution']['cluster']['log-dir']
             submission_command_string += " --error=%s/%%x.%%j.err " % config['execution']['cluster']['log-dir']
         os.makedirs(config['execution']['cluster']['log-dir'], exist_ok=True)
-
-
-    # check for incompatible arguments
-    if config['execution']['cluster']['args']:
-        # Validate and potentially convert cluster arguments
-        original_args = config['execution']['cluster']['args']
-        validated_args, warnings = validate_cluster_args(cluster_system, original_args)
-
-        if warnings:
-            print(f"Warning: Incompatible cluster arguments detected for {cluster_system.upper()}:", file=sys.stderr)
-            for warning in warnings:
-                print(f"  - {warning}", file=sys.stderr)
-
-            if cluster_system == 'slurm':
-                # Try to auto-convert SGE args to SLURM
-                converted_args, conversions = convert_sge_args_to_slurm(original_args)
-                if conversions:
-                    print("Attempting automatic conversion:", file=sys.stderr)
-                    for conversion in conversions:
-                        print(f"  - {conversion}", file=sys.stderr)
-                    submission_command_string += " " + converted_args
-                    print(f"Using converted args: {converted_args}", file=sys.stderr)
-            else:
-                print("No automatic conversion available. Please update your settings file.", file=sys.stderr)
-                submission_command_string += " " + original_args
-
     # allow for custom args per rule; will only filled if rule
     submission_command_string += " {cluster.args}"
 
