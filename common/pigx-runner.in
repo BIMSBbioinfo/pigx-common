@@ -632,4 +632,15 @@ else:
         command.append("help")
     command_exit = subprocess.run(command)
 
+    if os.environ.get('PIGX_LOGGING'):
+        import time
+
+        # dump the full command into a file for logging
+        with open(os.path.join("pigx_runs.log"), "a") as f:
+            start = time.monotonic()
+            ts = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            command_string = " ".join(command)
+            line = f"{ts}\t{command_string}\t\n"
+            f.write(line)
+
     sys.exit(command_exit.returncode)
