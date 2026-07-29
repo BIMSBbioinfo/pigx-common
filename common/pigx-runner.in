@@ -213,8 +213,116 @@ settings.
                            separators=(",",": "), ensure_ascii=True)
         outfile.write(dumps)
 
+def detect_cluster_system():
+    """Detect which cluster system is available (SGE or SLURM)."""
+    # Check for SLURM first (sbatch)
+    try:
+        subprocess.call(["sbatch", "--help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return 'slurm', 'sbatch --parsable'
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+
+    # Check for SGE (qsub)
+    try:
+        subprocess.call(["qsub", "-help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return 'sge', 'qsub'
+    except OSError as e:
+        if e.errno != errno.ENOENT:
+            raise
+
+    return None
+
+def validate_cluster_args(cluster_system, args_string):
+    """Validate cluster arguments for compatibility with the detected cluster system."""
+    if not args_string:
+        return args_string, []
+
+    warnings = []
+
+    if cluster_system == 'slurm':
+        # Check for SGE-specific arguments that won't work with SLURM
+        sge_patterns = [
+            ('-l ', 'resource requests (use SLURM equivalents like --time, --mem, etc.)'),
+            ('-pe ', 'parallel environment (use --cpus-per-task or --ntasks instead)'),
+            ('-q ', 'queue specification (use --partition instead)'),
+            ('-P ', 'project specification (use --account instead)'),
+            ('-m ', 'mail options (use --mail-type instead)'),
+            ('-M ', 'mail address (use --mail-user instead)'),
+            ('-N ', 'job name (use --job-name instead)'),
+            ('-o ', 'output file (use --output instead)'),
+            ('-e ', 'error file (use --error instead)'),
+            ('-cwd', 'current working directory (SLURM runs in submission directory by default)'),
+            ('-b y', 'binary execution (not needed in SLURM)'),
+            ('-v ', 'environment variables (use --export instead)')
+        ]
+
+        for pattern, description in sge_patterns:
+            if pattern in args_string:
+                warnings.append(f"SGE option '{pattern.strip()}' detected - {description}")
+
+    elif cluster_system == 'sge':
+        # Check for SLURM-specific arguments that won't work with SGE
+        slurm_patterns = [
+            ('--time', 'use -l h_rt instead'),
+            ('--mem', 'use -l h_vmem instead'),
+            ('--cpus-per-task', 'use -pe smp instead'),
+            ('--partition', 'use -q instead'),
+            ('--account', 'use -P instead'),
+            ('--mail-type', 'use -m instead'),
+            ('--mail-user', 'use -M instead'),
+            ('--job-name', 'use -N instead'),
+            ('--output', 'use -o instead'),
+            ('--error', 'use -e instead'),
+            ('--export', 'use -v instead'),
+            ('-C', 'use -l instead')
+        ]
+
+        for pattern, description in slurm_patterns:
+            if pattern in args_string:
+                warnings.append(f"SLURM option '{pattern}' detected - {description}")
+
+    return args_string, warnings
+
+def normalize_cluster_args(args_value, setting_name):
+    """Return a scheduler argument string from a string or list of strings."""
+    if isinstance(args_value, str):
+        return args_value
+    if isinstance(args_value, list) and all(isinstance(arg, str) for arg in args_value):
+        return " ".join(args_value)
+
+    bail(f"ERROR: {setting_name} must be a string or a list of strings.")
+
+
+def normalize_cluster_args_configuration(cluster_system):
+    """Normalize and validate every user-provided scheduler argument setting."""
+    cluster = config['execution']['cluster']
+    cluster['args'] = normalize_cluster_args(cluster.get('args', ''), 'execution.cluster.args')
+
+    for rule_name, rule in config['execution']['rules'].items():
+        if 'args' not in rule:
+            continue
+
+        setting_name = f'execution.rules.{rule_name}.args'
+        rule['args'] = normalize_cluster_args(rule['args'], setting_name)
+        _, warnings = validate_cluster_args(cluster_system, rule['args'])
+        if warnings:
+            print(f"Warning: Incompatible cluster arguments in {setting_name} for {cluster_system.upper()}:", file=sys.stderr)
+            for warning in warnings:
+                print(f"  - {warning}", file=sys.stderr)
+
+    _, warnings = validate_cluster_args(cluster_system, cluster['args'])
+    if warnings:
+        print(f"Warning: Incompatible cluster arguments in execution.cluster.args for {cluster_system.upper()}:", file=sys.stderr)
+        for warning in warnings:
+            print(f"  - {warning}", file=sys.stderr)
+
+
 def generate_cluster_configuration():
     rules = config['execution']['rules']
+    global_args = config['execution']['cluster'].get('args', '')
+    default_args = rules['__default__'].get('args', '')
+    augmented_default_args = " ".join(arg for arg in (global_args, default_args) if arg)
 
     cluster_conf = {}
     for rule in rules:
@@ -226,34 +334,42 @@ def generate_cluster_configuration():
         elif mem_mb.isdigit():
             mem_mb = mem_mb + 'M'
 
+        # Basic configuration for all cluster systems
+        rule_conf = {'nthreads': rules[rule]['threads'], 'MEM': mem_mb}
+
+        allowed_rule_keys = {'threads', 'memory', 'queue', 'num_gpus', 'args'}
+        unsupported_keys = set(rules[rule]) - allowed_rule_keys
+        if unsupported_keys:
+            unsupported = ', '.join(sorted(unsupported_keys))
+            bail(f"ERROR: Unsupported execution.rules.{rule} settings: {unsupported}. Use args instead.")
+
+        rule_args = rules[rule].get('args')
+        if rule_args:
+            parts = [arg for arg in (global_args, rule_args) if arg]
+        else:
+            parts = [augmented_default_args] if augmented_default_args else []
+        rule_conf['args'] = " ".join(parts)
+
+        # Add SGE-specific stack parameter only if it exists
+        if 'stack' in config['execution']['cluster']:
+            rule_conf['h_stack'] = config['execution']['cluster']['stack']
+
         if 'queue' in config['execution']['cluster']:
             # --- User has supplied general queue name for all rules---
             if 'queue' in rules[rule]:
               bail("ERROR: 'queue' multiply defined in settings file.") #AND per rule ->error
             else:
-              cluster_conf[rule] = {
-              'nthreads': rules[rule]['threads'],
-              'MEM':      mem_mb,
-              'queue':    config['execution']['cluster']['queue'],
-              'h_stack':  config['execution']['cluster']['stack']
-              }
+              rule_conf['queue'] = config['execution']['cluster']['queue']
+              cluster_conf[rule] = rule_conf
         elif ( 'queue' in rules[rule] ):
             # --- User has supplied a queue for this specific rule.
             if not 'queue' in rules['__default__']:
                 bail("ERROR: submission queue specified per rule with no default.")
-            cluster_conf[rule] = {
-              'nthreads': rules[rule]['threads'],
-              'MEM':      mem_mb,
-              'queue':    rules[rule]['queue'],
-              'h_stack':  config['execution']['cluster']['stack']
-              }
+            rule_conf['queue'] = rules[rule]['queue']
+            cluster_conf[rule] = rule_conf
         else:
               # --- User has provided no information on queue for this rule -> default.
-              cluster_conf[rule] = {
-              'nthreads': rules[rule]['threads'],
-              'MEM':      mem_mb,
-              'h_stack':  config['execution']['cluster']['stack']
-              }
+              cluster_conf[rule] = rule_conf
 
     cluster_config_file = "cluster_conf.json"
     with open(cluster_config_file, 'w') as outfile:
@@ -401,52 +517,84 @@ command = [
 ]
 
 if config['execution']['submit-to-cluster']:
+    cluster_system, submission_command = detect_cluster_system()
+
+    if cluster_system is None:
+        print("Error: Your system does not seem to support cluster submission.\nReason: Could not find qsub (SGE) or sbatch (SLURM) executable.", file=sys.stderr)
+        exit(1)
+
+    normalize_cluster_args_configuration(cluster_system)
     cluster_config_file = generate_cluster_configuration()
-    print("Commencing snakemake run submission to cluster", flush=True, file=sys.stderr)
+    print(f"Commencing snakemake run submission to {cluster_system.upper()} cluster", flush=True, file=sys.stderr)
 
     # Check if a particular queue has been specified: 
     if ( ('queue' in config['execution']['cluster'] )  or ( 'queue' in config['execution']['rules']['__default__'] )):
-        queue_selection_string = " -q {cluster.queue} "
-	# User has defined queue name(s) --either generally, or rule-specific.
-	# in either case, generate_cluster_configuration() (defined above) has 
-        # already printed the apropriate queue name to each rule.
-        queue_selection_string = " -q {cluster.queue} "
+        queue_selection_string = " -q {cluster.queue} " if cluster_system == 'sge' else " --partition={cluster.queue} "
     else :
-        # User has supplied no q value -> let SGE pick the the default.
+        # User has supplied no queue value -> let scheduler pick the default.
         queue_selection_string = ""
-    # --- done checking if ( queue name(s) supplied by user)
 
     # check if a contact email has been specified:
     if config['execution']['cluster']['contact-email'].lower() == 'none':
         contact_email_string = ""
     else:
-        contact_email_string = "-m a -M %s" % config['execution']['cluster']['contact-email']
+        if cluster_system == 'sge':
+            contact_email_string = "-m a -M %s" % config['execution']['cluster']['contact-email']
+        else:  # SLURM
+            contact_email_string = "--mail-type=END,FAIL --mail-user=%s" % config['execution']['cluster']['contact-email']
+
+    # put submission command
+    submission_command_string=submission_command
 
 
-    # check if machine allows for queue submission at all
-    try:
-        subprocess.call(["qsub", "-help"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except OSError as e:
-        if e.errno == errno.ENOENT:
-            print("Error: Your system does not seem to support cluster submission.\nReason: Could not find qsub executable.", file=sys.stderr)
-            exit(1)
-        else:
-            raise
+    # put environment variables
+    cluster_env_vars = ["R_LIBS_USER", "R_LIBS", "PIGX_PATH", "PIGX_UNINSTALLED", "GUIX_LOCPATH", "RSTUDIO_PANDOC"]
+    if cluster_system == 'sge': 
+        submission_command_string += " -v " + " -v ".join(cluster_env_vars)
+    else:  # SLURM
+        submission_command_string += " --export=" + ",".join(cluster_env_vars)
 
-    qsub = "qsub -v R_LIBS_USER -v R_LIBS -v PIGX_PATH -v GUIX_LOCPATH %s -l h_stack={cluster.h_stack}  -l h_vmem={cluster.MEM} %s -b y -pe smp {cluster.nthreads} -cwd" % (queue_selection_string, contact_email_string)
+    # put resources
+    if cluster_system == 'sge':
+        submission_command_string += " %s -l h_vmem={cluster.MEM} %s -pe smp {cluster.nthreads}" % (queue_selection_string, contact_email_string)
+        # put sge specific options
+        submission_command_string += " -b y -cwd"
+        # Add stack parameter only if it exists in the cluster config
+        if 'stack' in config['execution']['cluster']:
+            submission_command_string += " -l h_stack={cluster.h_stack}"
+    else:  # SLURM
+        submission_command_string += " %s --mem={cluster.MEM} %s --cpus-per-task={cluster.nthreads}" % (queue_selection_string, contact_email_string)
+
+    # set logging directory
     if config['execution']['cluster']['log-dir']:
-        qsub += " -o %s/ " % config['execution']['cluster']['log-dir']
-        qsub += " -e %s/ " % config['execution']['cluster']['log-dir']
+        if cluster_system == 'sge':
+            submission_command_string += " -o %s/ " % config['execution']['cluster']['log-dir']
+            submission_command_string += " -e %s/ " % config['execution']['cluster']['log-dir']
+        else:  # SLURM
+            submission_command_string += " --output=%s/%%x.%%j.out " % config['execution']['cluster']['log-dir']
+            submission_command_string += " --error=%s/%%x.%%j.err " % config['execution']['cluster']['log-dir']
         os.makedirs(config['execution']['cluster']['log-dir'], exist_ok=True)
+    # allow for custom args per rule; will only filled if rule
+    submission_command_string += " {cluster.args}"
 
-    if config['execution']['cluster']['args']:
-        qsub += " " + config['execution']['cluster']['args']
+    if config['execution']['cluster'].get('debug'):
+
+        debug_path = ( config['execution']['cluster']['debug'] if os.path.isabs(config['execution']['cluster']['debug']) else os.path.join(os.getcwd(), config['execution']['cluster']['debug']) ) 
+        os.makedirs(debug_path, exist_ok=True)
+
+        # dump the submission command into a file for debugging
+        with open(os.path.join(debug_path, "cluster_submission_command.sh"), "w") as f:
+            f.write(submission_command_string + "\n")
+
     command += [
+        "--cluster-cancel=scancel" if cluster_system == 'slurm' else "",
+        "--cluster-status={}/slurm-status.py".format(config['locations']['pkglibexecdir']),
         "--cluster-config={}".format(cluster_config_file),
-        "--cluster={}".format(qsub),
+        "--cluster={}".format(submission_command_string),
         "--jobscript={}/qsub-template.sh".format(config['locations']['pkglibexecdir']),
         "--latency-wait={}".format(config['execution']['cluster']['missing-file-timeout'])
     ]
+
 else:
     print("Commencing snakemake run submission locally", flush=True, file=sys.stderr)
 
@@ -483,5 +631,16 @@ else:
     if args.target and 'help' in args.target:
         command.append("help")
     command_exit = subprocess.run(command)
+
+    if os.environ.get('PIGX_LOGGING'):
+        import time
+
+        # dump the full command into a file for logging
+        with open(os.path.join("pigx_runs.log"), "a") as f:
+            start = time.monotonic()
+            ts = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+            command_string = " ".join(command)
+            line = f"{ts}\t{command_string}\t\n"
+            f.write(line)
 
     sys.exit(command_exit.returncode)
